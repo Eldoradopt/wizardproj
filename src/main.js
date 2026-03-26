@@ -99,35 +99,61 @@ function preload() {
 
 function create() {
     const { width, height } = this.scale;
-    // Hide status element once game starts correctly
     const status = document.getElementById('status-text');
     if (status) status.style.display = 'none';
 
-    // --- Terrain Initialization ---
+    console.log("Initializing Scene...");
+
+    // --- Asset Fallbacks (Invincibility) ---
+    // 1. Terrain Fallback
     terrainTexture = this.add.renderTexture(0, 0, width, height);
     if (this.textures.exists('terrain_base')) {
         terrainTexture.draw('terrain_base', 0, 0);
     } else {
-        console.warn("Terrain texture NOT found. Using fallback.");
+        console.warn("Terrain image missing! Drawing survival ground.");
+        terrainTexture.fill(0x1a1a2e);
+        const g = this.add.graphics().fillStyle(0x2f4f4f).fillRect(0, 450, 800, 150);
+        terrainTexture.draw(g);
+        g.destroy();
     }
     
-    // Create collision map safely
+    // 2. Wizard Sprite Fallback
+    if (!this.textures.exists('wizard_sprites')) {
+         console.warn("Wizard sprites missing! Generating programmatic textures.");
+         const g = this.make.graphics({ x: 0, y: 0, add: false });
+         g.fillStyle(0xffffff); g.fillRect(0, 0, 32, 32); 
+         g.fillStyle(0x000000); g.fillRect(8, 8, 4, 4); g.fillRect(20, 8, 4, 4);
+         g.generateTexture('wizard_sprites', 32, 32);
+    }
+    
+    // 3. Animation Safety
+    if (!this.anims.exists('idle')) {
+        this.anims.create({
+            key: 'idle',
+            frames: this.textures.get('wizard_sprites').frameTotal > 1 
+                ? this.anims.generateFrameNumbers('wizard_sprites', { start: 0, end: 1 })
+                : [{ key: 'wizard_sprites', frame: 0 }],
+            frameRate: 4,
+            repeat: -1
+        });
+    }
+
+    // --- Physics Map ---
     try {
-        this.terrainData = this.textures.get('terrain_base').getSourceImage();
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         this.terrainCtx = canvas.getContext('2d');
         
-        if (this.terrainData && this.terrainData.width > 0) {
-            this.terrainCtx.drawImage(this.terrainData, 0, 0);
+        const source = this.textures.get('terrain_base').getSourceImage();
+        if (source && source.width > 0) {
+            this.terrainCtx.drawImage(source, 0, 0);
         } else {
-             // Fallback programmatic terrain stripe
              this.terrainCtx.fillStyle = '#2f4f4f';
-             this.terrainCtx.fillRect(0, 500, 800, 100);
+             this.terrainCtx.fillRect(0, 450, 800, 150);
         }
         this.collisionMap = this.terrainCtx.getImageData(0, 0, width, height).data;
     } catch (e) {
-        console.error("Collision map error:", e);
+        console.error("Collision building failed:", e);
         this.collisionMap = new Uint8Array(width * height * 4);
     }
 
@@ -139,13 +165,6 @@ function create() {
     createSpellUI.call(this);
 
     // --- Wizards ---
-    this.anims.create({
-        key: 'idle',
-        frames: this.anims.generateFrameNumbers('wizard_sprites', { start: 0, end: 1 }),
-        frameRate: 4,
-        repeat: -1
-    });
-
     for (let i = 0; i < 2; i++) {
         const x = i === 0 ? 150 : 650;
         wizards[i] = this.physics.add.sprite(x, 100, 'wizard_sprites')
