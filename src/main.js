@@ -1,14 +1,24 @@
-const discordSdk = new window.DiscordSDK("1486773167891415251");
+import { DiscordSDK } from "@discord/embedded-app-sdk";
+import Phaser from "phaser";
+
+const clientId = "1486773167891415251";
+const discordSdk = new DiscordSDK(clientId);
 
 async function startApp() {
     const status = document.getElementById('status-text');
 
     try {
-        if (discordSdk) {
-            await discordSdk.ready();
-            console.log("SDK READY");
+        // Use a timeout to ensure "ready()" doesn't stall the app forever
+        // if not in the Discord environment.
+        const readyPromise = discordSdk.ready();
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 2000));
+
+        const result = await Promise.race([readyPromise, timeoutPromise]);
+
+        if (result === 'timeout') {
+            console.warn("Discord SDK ready() timed out. Running in local mode.");
         } else {
-            console.warn("No Discord SDK found");
+            console.log("SDK READY");
         }
     } catch (e) {
         console.error("SDK ERROR:", e);
