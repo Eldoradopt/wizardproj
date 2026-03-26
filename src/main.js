@@ -4,7 +4,7 @@ let discordSdk;
 // Only initialize if we're in a Discord environment (or CDN loaded correctly)
 if (window.discordSdk && window.discordSdk.DiscordSDK) {
     discordSdk = new window.discordSdk.DiscordSDK({
-        clientId: "a3c67f68a51a48d7fabe73323e1ecfaded761424c8333e4a96b52b8e7569fc9f" // The user must replace this or it will fail in prod
+        clientId: "1486773167891415251" // The user must replace this or it will fail in prod
     });
 } else {
     console.warn("Discord SDK not found. Running in local/web mode.");
@@ -12,24 +12,27 @@ if (window.discordSdk && window.discordSdk.DiscordSDK) {
 
 async function startApp() {
     const status = document.getElementById('status-text');
+    
+    const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("SDK Timeout")), 2500)
+    );
+
     try {
         if (discordSdk) {
-            status.innerText = "Connecting to Discord...";
-            await discordSdk.ready();
+            status.innerText = "Syncing with Discord...";
+            await Promise.race([discordSdk.ready(), timeout]);
             console.log("Discord SDK is ready!");
-            status.innerText = "Syncing State...";
         } else {
             status.innerText = "Web Debug Mode...";
         }
     } catch (error) {
-        console.error("Error during Discord SDK setup:", error);
-        status.innerText = "SDK Error (Starting Game anyway)";
+        console.warn("Discord SDK connection skipped or timed out:", error);
+        status.innerText = "Running in Lite Mode...";
     } finally {
+        status.innerText = "Starting Magic...";
         setTimeout(() => {
-            status.innerText = "Starting Engine...";
             new Phaser.Game(config);
-            // Hide status once game starts (we'll do this in Phaser's create)
-        }, 500);
+        }, 200);
     }
 }
 
@@ -100,17 +103,33 @@ function create() {
     const status = document.getElementById('status-text');
     if (status) status.style.display = 'none';
 
-    // --- Terrain ---
+    // --- Terrain Initialization ---
     terrainTexture = this.add.renderTexture(0, 0, width, height);
-    terrainTexture.draw('terrain_base', 0, 0);
-
-    // Create collision map
-    this.terrainData = this.textures.get('terrain_base').getSourceImage();
-    const canvas = document.createElement('canvas');
-    canvas.width = width; canvas.height = height;
-    this.terrainCtx = canvas.getContext('2d');
-    this.terrainCtx.drawImage(this.terrainData, 0, 0);
-    this.collisionMap = this.terrainCtx.getImageData(0, 0, width, height).data;
+    if (this.textures.exists('terrain_base')) {
+        terrainTexture.draw('terrain_base', 0, 0);
+    } else {
+        console.warn("Terrain texture NOT found. Using fallback.");
+    }
+    
+    // Create collision map safely
+    try {
+        this.terrainData = this.textures.get('terrain_base').getSourceImage();
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        this.terrainCtx = canvas.getContext('2d');
+        
+        if (this.terrainData && this.terrainData.width > 0) {
+            this.terrainCtx.drawImage(this.terrainData, 0, 0);
+        } else {
+             // Fallback programmatic terrain stripe
+             this.terrainCtx.fillStyle = '#2f4f4f';
+             this.terrainCtx.fillRect(0, 500, 800, 100);
+        }
+        this.collisionMap = this.terrainCtx.getImageData(0, 0, width, height).data;
+    } catch (e) {
+        console.error("Collision map error:", e);
+        this.collisionMap = new Uint8Array(width * height * 4);
+    }
 
     // --- UI ---
     turnText = this.add.text(width / 2, 40, 'Ready Player 1', {
