@@ -4,7 +4,7 @@ let discordSdk;
 // Only initialize if we're in a Discord environment (or CDN loaded correctly)
 if (window.discordSdk && window.discordSdk.DiscordSDK) {
     discordSdk = new window.discordSdk.DiscordSDK({
-        clientId: "YOUR_CLIENT_ID_HERE" // The user must replace this or it will fail in prod
+        clientId: "1486773167891415251" // The user must replace this or it will fail in prod
     });
 } else {
     console.warn("Discord SDK not found. Running in local/web mode.");
@@ -68,7 +68,7 @@ function preload() {
     // Load local assets
     this.load.spritesheet('wizard_sprites', 'assets/wizard_sprites.png', { frameWidth: 32, frameHeight: 32 });
     this.load.image('terrain_base', 'assets/terrain.png');
-    
+
     // Spell icons generated programmatically
     const spells = [
         { name: 'fireball', color: 0xffa500 },
@@ -76,7 +76,7 @@ function preload() {
         { name: 'shield', color: 0x4169e1 },
         { name: 'meteor', color: 0xff4500 }
     ];
-    
+
     spells.forEach(s => {
         const icon = this.make.graphics({ x: 0, y: 0, add: false });
         icon.fillStyle(s.color); icon.fillCircle(16, 16, 14);
@@ -103,7 +103,7 @@ function create() {
     // --- Terrain ---
     terrainTexture = this.add.renderTexture(0, 0, width, height);
     terrainTexture.draw('terrain_base', 0, 0);
-    
+
     // Create collision map
     this.terrainData = this.textures.get('terrain_base').getSourceImage();
     const canvas = document.createElement('canvas');
@@ -133,7 +133,7 @@ function create() {
             .setScale(2)
             .setTint(i === 0 ? 0x9b59b6 : 0xe74c3c)
             .play('idle');
-        
+
         wizards[i].setData({ id: i, hp: 100, shield: 0 });
         wizards[i].body.setGravityY(800);
         wizards[i].setCollideWorldBounds(true);
@@ -174,8 +174,8 @@ function updateSpellIcons() {
 function handleInput(pointer) {
     if (isFired) return;
     const wizard = wizards[currentTurn];
-    
-    switch(selectedSpell) {
+
+    switch (selectedSpell) {
         case 'fireball': launchProjectile.call(this, wizard, pointer, 'fireball', 700, 40); break;
         case 'meteor': launchProjectile.call(this, wizard, pointer, 'meteor', 600, 80); break;
         case 'blink':
@@ -257,9 +257,9 @@ function explodeAt(x, y, radius) {
 
     for (let dx = -radius; dx <= radius; dx++) {
         for (let dy = -radius; dy <= radius; dy++) {
-            if (dx*dx+dy*dy <= radius*radius) {
-                const px = Math.floor(x+dx), py = Math.floor(y+dy);
-                if (px>=0 && px<800 && py>=0 && py<600) this.collisionMap[(py*800+px)*4+3] = 0;
+            if (dx * dx + dy * dy <= radius * radius) {
+                const px = Math.floor(x + dx), py = Math.floor(y + dy);
+                if (px >= 0 && px < 800 && py >= 0 && py < 600) this.collisionMap[(py * 800 + px) * 4 + 3] = 0;
             }
         }
     }
@@ -267,7 +267,7 @@ function explodeAt(x, y, radius) {
     wizards.forEach(w => {
         const dist = Phaser.Math.Distance.Between(x, y, w.x, w.y);
         if (dist < radius + 30) {
-            let dmg = Math.floor((1 - dist / (radius+30)) * (radius === 80 ? 80 : 40));
+            let dmg = Math.floor((1 - dist / (radius + 30)) * (radius === 80 ? 80 : 40));
             applyDamage(w, dmg);
         }
     });
