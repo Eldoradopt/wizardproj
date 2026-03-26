@@ -12,8 +12,8 @@ if (window.discordSdk && window.discordSdk.DiscordSDK) {
 
 async function startApp() {
     const status = document.getElementById('status-text');
-    
-    const timeout = new Promise((_, reject) => 
+
+    const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("SDK Timeout")), 2500)
     );
 
@@ -116,21 +116,21 @@ function create() {
         terrainTexture.draw(g);
         g.destroy();
     }
-    
+
     // 2. Wizard Sprite Fallback
     if (!this.textures.exists('wizard_sprites')) {
-         console.warn("Wizard sprites missing! Generating programmatic textures.");
-         const g = this.make.graphics({ x: 0, y: 0, add: false });
-         g.fillStyle(0xffffff); g.fillRect(0, 0, 32, 32); 
-         g.fillStyle(0x000000); g.fillRect(8, 8, 4, 4); g.fillRect(20, 8, 4, 4);
-         g.generateTexture('wizard_sprites', 32, 32);
+        console.warn("Wizard sprites missing! Generating programmatic textures.");
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+        g.fillStyle(0xffffff); g.fillRect(0, 0, 32, 32);
+        g.fillStyle(0x000000); g.fillRect(8, 8, 4, 4); g.fillRect(20, 8, 4, 4);
+        g.generateTexture('wizard_sprites', 32, 32);
     }
-    
+
     // 3. Animation Safety
     if (!this.anims.exists('idle')) {
         this.anims.create({
             key: 'idle',
-            frames: this.textures.get('wizard_sprites').frameTotal > 1 
+            frames: this.textures.get('wizard_sprites').frameTotal > 1
                 ? this.anims.generateFrameNumbers('wizard_sprites', { start: 0, end: 1 })
                 : [{ key: 'wizard_sprites', frame: 0 }],
             frameRate: 4,
@@ -143,13 +143,13 @@ function create() {
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         this.terrainCtx = canvas.getContext('2d');
-        
+
         const source = this.textures.get('terrain_base').getSourceImage();
         if (source && source.width > 0) {
             this.terrainCtx.drawImage(source, 0, 0);
         } else {
-             this.terrainCtx.fillStyle = '#2f4f4f';
-             this.terrainCtx.fillRect(0, 450, 800, 150);
+            this.terrainCtx.fillStyle = '#2f4f4f';
+            this.terrainCtx.fillRect(0, 450, 800, 150);
         }
         this.collisionMap = this.terrainCtx.getImageData(0, 0, width, height).data;
     } catch (e) {
