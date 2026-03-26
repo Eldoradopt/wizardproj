@@ -1,339 +1,248 @@
-// Wizard Worms - Discord Activity Game
+// Wizard Worms - Premium Programmatic Edition
 let discordSdk;
-
-// Only initialize if we're in a Discord environment (or CDN loaded correctly)
 if (window.discordSdk && window.discordSdk.DiscordSDK) {
-    discordSdk = new window.discordSdk.DiscordSDK({
-        clientId: "1486773167891415251" // The user must replace this or it will fail in prod
-    });
-} else {
-    console.warn("Discord SDK not found. Running in local/web mode.");
+    discordSdk = new window.discordSdk.DiscordSDK({ clientId: "1486773167891415251" });
 }
 
 async function startApp() {
     const status = document.getElementById('status-text');
-
-    const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("SDK Timeout")), 2500)
-    );
-
     try {
-        if (discordSdk) {
-            status.innerText = "Syncing with Discord...";
-            await Promise.race([discordSdk.ready(), timeout]);
-            console.log("Discord SDK is ready!");
-        } else {
-            status.innerText = "Web Debug Mode...";
-        }
-    } catch (error) {
-        console.warn("Discord SDK connection skipped or timed out:", error);
-        status.innerText = "Running in Lite Mode...";
-    } finally {
-        status.innerText = "Starting Magic...";
-        setTimeout(() => {
-            new Phaser.Game(config);
-        }, 200);
-    }
+        if (discordSdk) await Promise.race([discordSdk.ready(), new Promise((_, r) => setTimeout(r, 2000))]);
+    } catch (e) { console.warn("SDK Skip:", e); }
+    finally { if (status) status.style.display = 'none'; new Phaser.Game(config); }
 }
 
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 800, height: 600,
     parent: 'game-container',
-    backgroundColor: '#0a0a1a',
-    physics: {
-        default: 'arcade',
-        arcade: {
-            debug: false
-        }
-    },
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
-    }
+    backgroundColor: '#0f172a',
+    physics: { default: 'arcade', arcade: { debug: false } },
+    scene: { preload, create, update }
 };
 
-let wizards = [];
-let healthBars = [];
-let currentTurn = 0;
-let cursors;
-let isFired = false;
-let terrainTexture;
-let projectiles;
-let turnText;
-let turnArrow;
-let selectedSpell = 'fireball';
-let spellIndicators = {};
+let wizards = [], healthBars = [], currentTurn = 0, isFired = false;
+let terrainTexture, collisionMap, projectiles, turnText, turnArrow, selectedSpell = 'fireball';
+let spellIcons = {}, cursors;
 
 function preload() {
-    // Load local assets
-    this.load.spritesheet('wizard_sprites', 'assets/wizard_sprites.png', { frameWidth: 32, frameHeight: 32 });
-    this.load.image('terrain_base', 'assets/terrain.png');
-
-    // Spell icons generated programmatically
-    const spells = [
-        { name: 'fireball', color: 0xffa500 },
-        { name: 'blink', color: 0x00ffff },
-        { name: 'shield', color: 0x4169e1 },
-        { name: 'meteor', color: 0xff4500 }
-    ];
-
-    spells.forEach(s => {
-        const icon = this.make.graphics({ x: 0, y: 0, add: false });
-        icon.fillStyle(s.color); icon.fillCircle(16, 16, 14);
-        icon.lineStyle(2, 0xffffff, 0.8); icon.strokeCircle(16, 16, 14);
-        icon.generateTexture(`icon_${s.name}`, 32, 32);
+    // Generate ALL textures programmatically for 100% reliability
+    
+    // 1. Wizards
+    const colors = [0x8b5cf6, 0xef4444]; // Purple, Red
+    colors.forEach((color, i) => {
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+        // Body (Robes)
+        g.fillStyle(color);
+        g.fillTriangle(16, 4, 4, 32, 28, 32);
+        // Beards/Face
+        g.fillStyle(0xffffff); g.fillCircle(16, 16, 4);
+        // Hat
+        g.fillStyle(0x1e293b); g.fillTriangle(16, 0, 8, 8, 24, 8);
+        g.generateTexture(`wizard${i}`, 32, 32);
     });
 
-    // Projectile textures
-    const fireballG = this.make.graphics({ x: 0, y: 0, add: false });
-    fireballG.fillStyle(0xffe066); fireballG.fillCircle(8, 8, 8);
-    fireballG.generateTexture('fireball', 16, 16);
+    // 2. Projectiles
+    const prj = [
+        { name: 'fireball', color: 0xf59e0b, r: 8 },
+        { name: 'meteor', color: 0xd97706, r: 12 }
+    ];
+    prj.forEach(p => {
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+        g.fillStyle(p.color); g.fillCircle(p.r, p.r, p.r);
+        g.lineStyle(2, 0xffffff, 0.5); g.strokeCircle(p.r, p.r, p.r);
+        g.generateTexture(p.name, p.r*2, p.r*2);
+    });
 
-    const meteorG = this.make.graphics({ x: 0, y: 0, add: false });
-    meteorG.fillStyle(0xff4500); meteorG.fillCircle(12, 12, 12);
-    meteorG.generateTexture('meteor', 24, 24);
+    // 3. UI Icons
+    const sp = [
+        { id: 'fireball', c: 0xf59e0b }, { id: 'blink', c: 0x06b6d4 },
+        { id: 'shield', c: 0x3b82f6 }, { id: 'meteor', c: 0x7c3aed }
+    ];
+    sp.forEach(s => {
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+        g.fillStyle(s.c); g.fillRoundedRect(2, 2, 36, 36, 8);
+        g.lineStyle(2, 0xffffff, 0.8); g.strokeRoundedRect(2, 2, 36, 36, 8);
+        g.generateTexture(`icon_${s.id}`, 40, 40);
+    });
 }
 
 function create() {
     const { width, height } = this.scale;
-    const status = document.getElementById('status-text');
-    if (status) status.style.display = 'none';
-
-    console.log("Initializing Scene...");
-
-    // --- Asset Fallbacks (Invincibility) ---
-    // 1. Terrain Fallback
+    
+    // --- Procedural Terrain Generation ---
     terrainTexture = this.add.renderTexture(0, 0, width, height);
-    if (this.textures.exists('terrain_base')) {
-        terrainTexture.draw('terrain_base', 0, 0);
-    } else {
-        console.warn("Terrain image missing! Drawing survival ground.");
-        terrainTexture.fill(0x1a1a2e);
-        const g = this.add.graphics().fillStyle(0x2f4f4f).fillRect(0, 450, 800, 150);
-        terrainTexture.draw(g);
-        g.destroy();
+    const tg = this.add.graphics();
+    // Sky gradient
+    tg.fillGradientStyle(0x1e293b, 0x1e293b, 0x0f172a, 0x0f172a, 1);
+    tg.fillRect(0, 0, width, height);
+    
+    // Terrain Shape
+    tg.fillStyle(0x334155); // Deep dirt
+    tg.beginPath();
+    tg.moveTo(0, height);
+    for(let x=0; x<=width; x+=20) {
+        const y = 400 + Math.sin(x*0.02)*40 + Math.sin(x*0.005)*80;
+        tg.lineTo(x, y);
     }
+    tg.lineTo(width, height);
+    tg.closePath(); tg.fill();
 
-    // 2. Wizard Sprite Fallback
-    if (!this.textures.exists('wizard_sprites')) {
-        console.warn("Wizard sprites missing! Generating programmatic textures.");
-        const g = this.make.graphics({ x: 0, y: 0, add: false });
-        g.fillStyle(0xffffff); g.fillRect(0, 0, 32, 32);
-        g.fillStyle(0x000000); g.fillRect(8, 8, 4, 4); g.fillRect(20, 8, 4, 4);
-        g.generateTexture('wizard_sprites', 32, 32);
+    // Grass Top
+    tg.lineStyle(6, 0x10b981, 1);
+    tg.beginPath();
+    for(let x=0; x<=width; x+=10) {
+        const y = 400 + Math.sin(x*0.02)*40 + Math.sin(x*0.005)*80;
+        if(x===0) tg.moveTo(x, y); else tg.lineTo(x, y);
     }
+    tg.strokePath();
 
-    // 3. Animation Safety
-    if (!this.anims.exists('idle')) {
-        this.anims.create({
-            key: 'idle',
-            frames: this.textures.get('wizard_sprites').frameTotal > 1
-                ? this.anims.generateFrameNumbers('wizard_sprites', { start: 0, end: 1 })
-                : [{ key: 'wizard_sprites', frame: 0 }],
-            frameRate: 4,
-            repeat: -1
-        });
+    terrainTexture.draw(tg);
+    tg.destroy();
+
+    // Collision Map
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width; tempCanvas.height = height;
+    const ctx = tempCanvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    // Re-draw the same shape into the canvas for physics
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    for(let x=0; x<=width; x+=5) {
+        const y = 400 + Math.sin(x*0.02)*40 + Math.sin(x*0.005)*80;
+        ctx.lineTo(x, y);
     }
+    ctx.lineTo(width, height); ctx.fill();
+    this.collisionMap = ctx.getImageData(0, 0, width, height).data;
 
-    // --- Physics Map ---
-    try {
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        this.terrainCtx = canvas.getContext('2d');
-
-        const source = this.textures.get('terrain_base').getSourceImage();
-        if (source && source.width > 0) {
-            this.terrainCtx.drawImage(source, 0, 0);
-        } else {
-            this.terrainCtx.fillStyle = '#2f4f4f';
-            this.terrainCtx.fillRect(0, 450, 800, 150);
-        }
-        this.collisionMap = this.terrainCtx.getImageData(0, 0, width, height).data;
-    } catch (e) {
-        console.error("Collision building failed:", e);
-        this.collisionMap = new Uint8Array(width * height * 4);
-    }
-
-    // --- UI ---
-    turnText = this.add.text(width / 2, 40, 'Ready Player 1', {
-        fontSize: '32px', color: '#fff', stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
-    }).setOrigin(0.5);
-
-    createSpellUI.call(this);
-
-    // --- Wizards ---
+    // --- Entities ---
     for (let i = 0; i < 2; i++) {
-        const x = i === 0 ? 150 : 650;
-        wizards[i] = this.physics.add.sprite(x, 100, 'wizard_sprites')
-            .setScale(2)
-            .setTint(i === 0 ? 0x9b59b6 : 0xe74c3c)
-            .play('idle');
-
-        wizards[i].setData({ id: i, hp: 100, shield: 0 });
-        wizards[i].body.setGravityY(800);
-        wizards[i].setCollideWorldBounds(true);
-
+        wizards[i] = this.physics.add.sprite(i === 0 ? 100 : 700, 100, `wizard${i}`);
+        wizards[i].setData({ hp: 100, id: i, shield: 0 });
+        wizards[i].body.setGravityY(1000);
+        
         healthBars[i] = {
-            bg: this.add.rectangle(0, 0, 60, 10, 0x000000),
-            value: this.add.rectangle(0, 0, 60, 10, 0x2ecc71)
+            bg: this.add.rectangle(0, 0, 50, 6, 0x1e293b).setStrokeStyle(1, 0xffffff, 0.2),
+            val: this.add.rectangle(0, 0, 50, 6, 0x10b981)
         };
     }
 
+    turnText = this.add.text(width/2, 50, 'PLAYER 1', { 
+        fontFamily: 'Orbitron, sans-serif', fontSize: '32px', color: '#8b5cf6', fontWeight: 'bold' 
+    }).setOrigin(0.5).setShadow(2, 2, '#000', 4);
+
+    // Spell Bar
+    const spellNames = ['fireball', 'blink', 'shield', 'meteor'];
+    spellNames.forEach((s, i) => {
+        const icon = this.add.image(280 + i * 80, 540, `icon_${s}`).setInteractive();
+        icon.on('pointerdown', () => { selectedSpell = s; updateSpellUI(); });
+        spellIcons[s] = icon;
+    });
+
+    const updateSpellUI = () => {
+        spellNames.forEach(s => spellIcons[s].setAlpha(s === selectedSpell ? 1 : 0.4).setScale(s === selectedSpell ? 1.2 : 1));
+    };
+    updateSpellUI();
+
     projectiles = this.physics.add.group();
     cursors = this.input.keyboard.createCursorKeys();
-    turnArrow = this.add.triangle(0, 0, -12, -50, 12, -50, 0, -30, 0x2ecc71);
+    turnArrow = this.add.triangle(0, 0, -10, -50, 10, -50, 0, -30, 0x10b981);
 
-    this.input.on('pointerdown', handleInput, this);
-}
-
-function createSpellUI() {
-    const spells = ['fireball', 'blink', 'shield', 'meteor'];
-    spells.forEach((spell, i) => {
-        const btn = this.add.image(60 + i * 60, 540, `icon_${spell}`).setInteractive();
-        btn.on('pointerdown', () => {
-            selectedSpell = spell;
-            updateSpellIcons.call(this);
-        });
-        spellIndicators[spell] = btn;
-    });
-    updateSpellIcons.call(this);
-}
-
-function updateSpellIcons() {
-    Object.keys(spellIndicators).forEach(k => {
-        const active = k === selectedSpell;
-        spellIndicators[k].setAlpha(active ? 1 : 0.5).setScale(active ? 1.3 : 1);
-    });
-}
-
-function handleInput(pointer) {
-    if (isFired) return;
-    const wizard = wizards[currentTurn];
-
-    switch (selectedSpell) {
-        case 'fireball': launchProjectile.call(this, wizard, pointer, 'fireball', 700, 40); break;
-        case 'meteor': launchProjectile.call(this, wizard, pointer, 'meteor', 600, 80); break;
-        case 'blink':
-            if (Phaser.Math.Distance.Between(wizard.x, wizard.y, pointer.x, pointer.y) < 350) {
-                this.cameras.main.flash(200, 0, 255, 255);
-                wizard.setPosition(pointer.x, pointer.y).setVelocity(0);
-                finishTurn.call(this);
+    this.input.on('pointerdown', p => {
+        if(isFired) return;
+        const wiz = wizards[currentTurn];
+        if(selectedSpell === 'blink') {
+            if(Phaser.Math.Distance.Between(wiz.x, wiz.y, p.x, p.y) < 400) {
+                this.cameras.main.flash(300, 0, 255, 255);
+                wiz.setPosition(p.x, p.y).setVelocity(0); finishTurn.call(this);
             }
-            break;
-        case 'shield':
-            wizard.setData('shield', 3);
-            wizard.setTint(0x3498db);
-            finishTurn.call(this);
-            break;
-    }
-}
-
-function launchProjectile(wizard, pointer, type, speed, radius) {
-    const p = projectiles.create(wizard.x, wizard.y - 20, type);
-    const angle = Phaser.Math.Angle.Between(wizard.x, wizard.y - 20, pointer.x, pointer.y);
-    p.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    p.setGravityY(type === 'meteor' ? 800 : 500);
-    p.setData('radius', radius);
-    isFired = true;
+        } else if(selectedSpell === 'shield') {
+            wiz.setData('shield', 3); wiz.setAlpha(0.6); finishTurn.call(this);
+        } else {
+            const pr = projectiles.create(wiz.x, wiz.y - 20, selectedSpell);
+            const ang = Phaser.Math.Angle.Between(wiz.x, wiz.y - 20, p.x, p.y);
+            pr.setVelocity(Math.cos(ang)*800, Math.sin(ang)*800);
+            pr.setGravityY(selectedSpell === 'meteor' ? 1200 : 600);
+            pr.setData('radius', selectedSpell === 'meteor' ? 80 : 40);
+            isFired = true;
+        }
+    });
 }
 
 function update() {
-    const activeWizard = wizards[currentTurn];
-    turnArrow.setPosition(activeWizard.x, activeWizard.y - 50);
+    const wiz = wizards[currentTurn];
+    turnArrow.setPosition(wiz.x, wiz.y - 40);
 
     wizards.forEach((w, i) => {
-        healthBars[i].bg.setPosition(w.x, w.y - 60);
-        healthBars[i].value.setPosition(w.x - (60 - (w.getData('hp') / 100 * 60)) / 2, w.y - 60);
-        healthBars[i].value.width = (w.getData('hp') / 100) * 60;
-        healthBars[i].value.fillColor = w.getData('hp') < 30 ? 0xe74c3c : 0x2ecc71;
-        handleTerrainCollision.call(this, w);
+        healthBars[i].bg.setPosition(w.x, w.y - 50);
+        healthBars[i].val.setPosition(w.x, w.y - 50);
+        healthBars[i].val.width = (w.getData('hp')/100) * 50;
+        healthBars[i].val.fillColor = w.getData('hp') < 30 ? 0xef4444 : 0x10b981;
+        
+        // Physics logic: walk up slopes
+        const gnd = isSolid.call(this, w.x, w.y + 16);
+        if(gnd) {
+            w.body.setGravityY(0); w.setVelocityY(0);
+            let push = 0; while(isSolid.call(this, w.x, w.y + 16 - push) && push < 32) push++;
+            w.y -= push;
+        } else { w.body.setGravityY(1000); }
     });
 
     projectiles.getChildren().forEach(p => {
-        if (checkPixelCollision.call(this, p.x, p.y)) {
-            explodeAt.call(this, p.x, p.y, p.getData('radius'));
+        if(isSolid.call(this, p.x, p.y)) {
+            explode(p.x, p.y, p.getData('radius'), this);
             p.destroy();
         }
     });
 
-    if (!isFired) {
-        activeWizard.setVelocityX(cursors.left.isDown ? -180 : cursors.right.isDown ? 180 : 0);
-        if (cursors.up.isDown && activeWizard.isOnGround) activeWizard.setVelocityY(-450);
+    if(!isFired) {
+        if(cursors.left.isDown) wiz.setVelocityX(-160);
+        else if(cursors.right.isDown) wiz.setVelocityX(160);
+        else wiz.setVelocityX(0);
+        if(cursors.up.isDown && isSolid.call(this, wiz.x, wiz.y+17)) wiz.setVelocityY(-450);
     } else {
-        activeWizard.setVelocityX(0);
-        if (projectiles.countActive(true) === 0) {
-            this.time.delayedCall(1000, finishTurn, [], this);
-        }
+        wiz.setVelocityX(0);
+        if(projectiles.countActive(true) === 0) this.time.delayedCall(1200, finishTurn, [], this);
     }
 }
 
-function handleTerrainCollision(e) {
-    e.isOnGround = checkPixelCollision.call(this, e.x, e.y + 20);
-    if (e.isOnGround) {
-        e.body.setGravityY(0).setVelocityY(0);
-        let push = 0;
-        while (checkPixelCollision.call(this, e.x, e.y + 20 - push) && push < 30) push++;
-        e.y -= push;
-    } else {
-        e.body.setGravityY(1000);
-    }
+function isSolid(x, y) {
+    if(x<0 || x>=800 || y<0 || y>=600) return false;
+    return this.collisionMap ? this.collisionMap[(Math.floor(y)*800 + Math.floor(x))*4 + 3] > 128 : false;
 }
 
-function checkPixelCollision(x, y) {
-    if (x < 0 || x >= 800 || y < 0 || y >= 600) return false;
-    return this.collisionMap[(Math.floor(y) * 800 + Math.floor(x)) * 4 + 3] > 128;
-}
-
-function explodeAt(x, y, radius) {
-    this.cameras.main.shake(200, 0.015);
-    const circle = this.add.graphics().fillStyle(0, 1).fillCircle(x, y, radius);
+function explode(x, y, rad, scene) {
+    scene.cameras.main.shake(200, 0.02);
+    const circle = scene.add.graphics().fillStyle(0, 1).fillCircle(x, y, rad);
     terrainTexture.erase(circle);
     circle.destroy();
 
-    for (let dx = -radius; dx <= radius; dx++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-            if (dx * dx + dy * dy <= radius * radius) {
-                const px = Math.floor(x + dx), py = Math.floor(y + dy);
-                if (px >= 0 && px < 800 && py >= 0 && py < 600) this.collisionMap[(py * 800 + px) * 4 + 3] = 0;
+    for(let dx=-rad; dx<=rad; dx++) {
+        for(let dy=-rad; dy<=rad; dy++) {
+            if(dx*dx+dy*dy <= rad*rad) {
+                const px = Math.floor(x+dx), py = Math.floor(y+dy);
+                if(px>=0 && px<800 && py>=0 && py<600) scene.collisionMap[(py*800+px)*4 + 3] = 0;
             }
         }
     }
 
     wizards.forEach(w => {
-        const dist = Phaser.Math.Distance.Between(x, y, w.x, w.y);
-        if (dist < radius + 30) {
-            let dmg = Math.floor((1 - dist / (radius + 30)) * (radius === 80 ? 80 : 40));
-            applyDamage(w, dmg);
+        const d = Phaser.Math.Distance.Between(x, y, w.x, w.y);
+        if(d < rad + 20) {
+            let dmg = Math.floor((1 - d/(rad+20)) * (rad === 80 ? 70 : 35));
+            if(w.getData('shield') > 0) { 
+                dmg = Math.floor(dmg/3); w.setData('shield', w.getData('shield')-1); 
+                if(w.getData('shield')<=0) w.setAlpha(1);
+            }
+            w.setData('hp', Math.max(0, w.getData('hp') - dmg));
+            if(w.getData('hp') === 0) w.setTint(0x1e293b).setActive(false);
         }
     });
 }
 
-function applyDamage(w, amount) {
-    if (w.getData('shield') > 0) {
-        amount = Math.floor(amount / 3);
-        w.setData('shield', w.getData('shield') - 1);
-        if (w.getData('shield') <= 0) w.clearTint().setTint(w.getData('id') === 0 ? 0x9b59b6 : 0xe74c3c);
-    }
-    const hp = Math.max(0, w.getData('hp') - amount);
-    w.setData('hp', hp);
-    if (hp === 0) w.setTint(0x333333).setAlpha(0.7);
-}
-
 function finishTurn() {
-    if (!isFired && (selectedSpell === 'fireball' || selectedSpell === 'meteor')) return;
-    currentTurn = (currentTurn + 1) % wizards.length;
-    isFired = false;
-    turnText.setText(`Wizard ${currentTurn + 1}'s Turn`);
-    const next = wizards[currentTurn];
-    if (next.getData('shield') <= 0) next.setTint(currentTurn === 0 ? 0x9b59b6 : 0xe74c3c);
+    currentTurn = (currentTurn + 1)%2; isFired = false;
+    turnText.setText(`PLAYER ${currentTurn + 1}`).setColor(currentTurn === 0 ? '#8b5cf6' : '#ef4444');
 }
 
-startApp().catch(err => {
-    console.error("Critical error starting the application:", err);
-    // Even if startApp fails, try to boot Phaser as last resort
-    new Phaser.Game(config);
-});
-
+startApp();
