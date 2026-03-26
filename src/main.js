@@ -4,7 +4,7 @@ let discordSdk;
 // Only initialize if we're in a Discord environment (or CDN loaded correctly)
 if (window.discordSdk && window.discordSdk.DiscordSDK) {
     discordSdk = new window.discordSdk.DiscordSDK({
-        clientId: "1486773167891415251" // The user must replace this or it will fail in prod
+        clientId: "a3c67f68a51a48d7fabe73323e1ecfaded761424c8333e4a96b52b8e7569fc9f" // The user must replace this or it will fail in prod
     });
 } else {
     console.warn("Discord SDK not found. Running in local/web mode.");
