@@ -1,29 +1,21 @@
-// Wizard Worms - Premium Programmatic Edition
-
-import { DiscordSDK } from "https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk/+esm";
-
-const discordSdk = new DiscordSDK("1486773167891415251");
+const discordSdk = new window.DiscordSDK("1486773167891415251");
 
 async function startApp() {
     const status = document.getElementById('status-text');
 
     try {
-        await discordSdk.ready();
-        console.log("Discord SDK ready");
+        if (discordSdk) {
+            await discordSdk.ready();
+            console.log("SDK READY");
+        } else {
+            console.warn("No Discord SDK found");
+        }
     } catch (e) {
-        console.error("SDK failed:", e);
+        console.error("SDK ERROR:", e);
     }
 
     if (status) status.style.display = 'none';
     new Phaser.Game(config);
-}
-
-async function startApp() {
-    const status = document.getElementById('status-text');
-    try {
-        if (discordSdk) await Promise.race([discordSdk.ready(), new Promise((_, r) => setTimeout(r, 2000))]);
-    } catch (e) { console.warn("SDK Skip:", e); }
-    finally { if (status) status.style.display = 'none'; new Phaser.Game(config); }
 }
 
 const config = {

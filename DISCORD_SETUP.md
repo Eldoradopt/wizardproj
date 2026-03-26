@@ -42,11 +42,7 @@ This step tells Discord where to find your game.
 Once your app is registered, you should update your `clientId` in `src/main.js`:
 ```javascript
 // src/main.js
-import { DiscordSDK } from "@discord/embedded-app-sdk";
-
-const discordSdk = new DiscordSDK({
-    clientId: "YOUR_CLIENT_ID_HERE"
-});
+const discordSdk = new DiscordSDK("YOUR_CLIENT_ID_HERE");
 
 setupDiscord();
 
